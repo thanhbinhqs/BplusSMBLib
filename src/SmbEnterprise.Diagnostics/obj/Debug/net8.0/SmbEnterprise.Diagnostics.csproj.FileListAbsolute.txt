@@ -1,0 +1,15 @@
+C:\Users\BINH\Desktop\Bplus\src\SmbEnterprise.Diagnostics\bin\Debug\net8.0\SmbEnterprise.Diagnostics.deps.json
+C:\Users\BINH\Desktop\Bplus\src\SmbEnterprise.Diagnostics\bin\Debug\net8.0\SmbEnterprise.Diagnostics.dll
+C:\Users\BINH\Desktop\Bplus\src\SmbEnterprise.Diagnostics\bin\Debug\net8.0\SmbEnterprise.Diagnostics.pdb
+C:\Users\BINH\Desktop\Bplus\src\SmbEnterprise.Diagnostics\bin\Debug\net8.0\SmbEnterprise.Core.dll
+C:\Users\BINH\Desktop\Bplus\src\SmbEnterprise.Diagnostics\bin\Debug\net8.0\SmbEnterprise.Core.pdb
+C:\Users\BINH\Desktop\Bplus\src\SmbEnterprise.Diagnostics\obj\Debug\net8.0\SmbEnterprise.Diagnostics.csproj.AssemblyReference.cache
+C:\Users\BINH\Desktop\Bplus\src\SmbEnterprise.Diagnostics\obj\Debug\net8.0\SmbEnterprise.Diagnostics.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\BINH\Desktop\Bplus\src\SmbEnterprise.Diagnostics\obj\Debug\net8.0\SmbEnterprise.Diagnostics.AssemblyInfoInputs.cache
+C:\Users\BINH\Desktop\Bplus\src\SmbEnterprise.Diagnostics\obj\Debug\net8.0\SmbEnterprise.Diagnostics.AssemblyInfo.cs
+C:\Users\BINH\Desktop\Bplus\src\SmbEnterprise.Diagnostics\obj\Debug\net8.0\SmbEnterprise.Diagnostics.csproj.CoreCompileInputs.cache
+C:\Users\BINH\Desktop\Bplus\src\SmbEnterprise.Diagnostics\obj\Debug\net8.0\SmbEnter.1225DCB3.Up2Date
+C:\Users\BINH\Desktop\Bplus\src\SmbEnterprise.Diagnostics\obj\Debug\net8.0\SmbEnterprise.Diagnostics.dll
+C:\Users\BINH\Desktop\Bplus\src\SmbEnterprise.Diagnostics\obj\Debug\net8.0\refint\SmbEnterprise.Diagnostics.dll
+C:\Users\BINH\Desktop\Bplus\src\SmbEnterprise.Diagnostics\obj\Debug\net8.0\SmbEnterprise.Diagnostics.pdb
+C:\Users\BINH\Desktop\Bplus\src\SmbEnterprise.Diagnostics\obj\Debug\net8.0\ref\SmbEnterprise.Diagnostics.dll

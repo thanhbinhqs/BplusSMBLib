@@ -1,0 +1,12 @@
+C:\Users\BINH\Desktop\Bplus\src\SmbEnterprise.Core\bin\Release\net8.0\SmbEnterprise.Core.deps.json
+C:\Users\BINH\Desktop\Bplus\src\SmbEnterprise.Core\bin\Release\net8.0\SmbEnterprise.Core.dll
+C:\Users\BINH\Desktop\Bplus\src\SmbEnterprise.Core\bin\Release\net8.0\SmbEnterprise.Core.pdb
+C:\Users\BINH\Desktop\Bplus\src\SmbEnterprise.Core\obj\Release\net8.0\SmbEnterprise.Core.csproj.AssemblyReference.cache
+C:\Users\BINH\Desktop\Bplus\src\SmbEnterprise.Core\obj\Release\net8.0\SmbEnterprise.Core.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\BINH\Desktop\Bplus\src\SmbEnterprise.Core\obj\Release\net8.0\SmbEnterprise.Core.AssemblyInfoInputs.cache
+C:\Users\BINH\Desktop\Bplus\src\SmbEnterprise.Core\obj\Release\net8.0\SmbEnterprise.Core.AssemblyInfo.cs
+C:\Users\BINH\Desktop\Bplus\src\SmbEnterprise.Core\obj\Release\net8.0\SmbEnterprise.Core.csproj.CoreCompileInputs.cache
+C:\Users\BINH\Desktop\Bplus\src\SmbEnterprise.Core\obj\Release\net8.0\SmbEnterprise.Core.dll
+C:\Users\BINH\Desktop\Bplus\src\SmbEnterprise.Core\obj\Release\net8.0\refint\SmbEnterprise.Core.dll
+C:\Users\BINH\Desktop\Bplus\src\SmbEnterprise.Core\obj\Release\net8.0\SmbEnterprise.Core.pdb
+C:\Users\BINH\Desktop\Bplus\src\SmbEnterprise.Core\obj\Release\net8.0\ref\SmbEnterprise.Core.dll

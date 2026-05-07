@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\SmbEnterprise.Core\SmbEnterprise.Core.csproj" />
+    <ProjectReference Include="..\..\src\SmbEnterprise.Protocol.SMB\SmbEnterprise.Protocol.SMB.csproj" />
+    <ProjectReference Include="..\..\src\SmbEnterprise.Transfer\SmbEnterprise.Transfer.csproj" />
+    <ProjectReference Include="..\..\src\SmbEnterprise.Checksum\SmbEnterprise.Checksum.csproj" />
+    <ProjectReference Include="..\..\src\SmbEnterprise.Jobs\SmbEnterprise.Jobs.csproj" />
+    <ProjectReference Include="..\..\src\SmbEnterprise.Diagnostics\SmbEnterprise.Diagnostics.csproj" />
+    <ProjectReference Include="..\..\src\SmbEnterprise.Cache\SmbEnterprise.Cache.csproj" />
+    <ProjectReference Include="..\..\src\SmbEnterprise.Persistence\SmbEnterprise.Persistence.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="8.0.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="8.0.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="8.0.0" />
+    <PackageReference Include="Serilog" Version="3.1.1" />
+    <PackageReference Include="Serilog.Extensions.Logging" Version="8.0.0" />
+    <PackageReference Include="Serilog.Sinks.Console" Version="5.0.1" />
+    <PackageReference Include="Serilog.Sinks.File" Version="5.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Update="Properties\Resources.Designer.cs">
+      <DesignTime>True</DesignTime>
+      <AutoGen>True</AutoGen>
+      <DependentUpon>Resources.resx</DependentUpon>
+    </Compile>
+    <EmbeddedResource Update="Properties\Resources.resx">
+      <Generator>ResXFileCodeGenerator</Generator>
+      <LastGenOutput>Resources.Designer.cs</LastGenOutput>
+    </EmbeddedResource>
+  </ItemGroup>
+
+</Project>
