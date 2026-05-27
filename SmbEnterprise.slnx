@@ -3,10 +3,13 @@
     <Project Path="benchmarks/SmbEnterprise.Benchmarks/SmbEnterprise.Benchmarks.csproj" />
   </Folder>
   <Folder Name="/samples/">
+    <Project Path="samples/DHCP.ManagementApp/DHCP.ManagementApp.csproj" />
+    <Project Path="samples/DHCP.SampleServer/DHCP.SampleServer.csproj" />
     <Project Path="samples/SmbEnterprise.SampleApp/SmbEnterprise.SampleApp.csproj" />
     <Project Path="samples/SmbEnterprise.WinFormsApp/SmbEnterprise.WinFormsApp.csproj" />
   </Folder>
   <Folder Name="/src/">
+    <Project Path="src/DHCP.Core/DHCP.Core.csproj" />
     <Project Path="src/SmbEnterprise.Cache/SmbEnterprise.Cache.csproj" />
     <Project Path="src/SmbEnterprise.Checksum/SmbEnterprise.Checksum.csproj" />
     <Project Path="src/SmbEnterprise.Core/SmbEnterprise.Core.csproj" />

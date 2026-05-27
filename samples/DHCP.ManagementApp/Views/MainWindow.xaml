@@ -1,0 +1,538 @@
+<Window x:Class="DHCP.ManagementApp.Views.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="clr-namespace:DHCP.ManagementApp.ViewModels"
+        mc:Ignorable="d"
+        Title="DHCP Server Management" 
+        Height="700" Width="1200"
+        WindowStartupLocation="CenterScreen"
+        Background="{StaticResource BackgroundBrush}">
+
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <Border Grid.Row="0" Background="{StaticResource PrimaryBrush}" Padding="20,15">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0" Orientation="Horizontal">
+                    <TextBlock Text="🌐" FontSize="24" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                    <StackPanel>
+                        <TextBlock Text="DHCP Server Management" 
+                                 FontSize="20" 
+                                 FontWeight="Bold" 
+                                 Foreground="White"/>
+                        <TextBlock Text="Professional DHCP Server Control Panel" 
+                                 FontSize="12" 
+                                 Foreground="#E0E7FF"/>
+                    </StackPanel>
+                </StackPanel>
+
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Border Background="#1E40AF" CornerRadius="6" Padding="12,6" Margin="0,0,10,0">
+                        <StackPanel Orientation="Horizontal">
+                            <Ellipse Width="10" Height="10" Margin="0,0,8,0">
+                                <Ellipse.Fill>
+                                    <SolidColorBrush Color="{Binding IsServerRunning, Converter={StaticResource StatusColorConverter}, FallbackValue=Red}"/>
+                                </Ellipse.Fill>
+                            </Ellipse>
+                            <TextBlock Text="{Binding ServerStatus}" 
+                                     Foreground="White" 
+                                     FontWeight="SemiBold"
+                                     FontSize="13"/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- Main Content -->
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="250"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Navigation -->
+            <Border Grid.Column="0" 
+                    Background="White" 
+                    BorderBrush="{StaticResource BorderBrush}" 
+                    BorderThickness="0,0,1,0"
+                    Padding="10">
+                <StackPanel>
+                    <TextBlock Text="Navigation" 
+                             FontSize="12" 
+                             FontWeight="Bold" 
+                             Foreground="{StaticResource TextSecondaryBrush}"
+                             Margin="12,10,0,10"/>
+
+                    <Button Content="📊 Dashboard" 
+                            Style="{StaticResource NavButton}"
+                            Command="{Binding NavigateToDashboardCommand}"/>
+
+                    <Button Content="📋 Active Leases" 
+                            Style="{StaticResource NavButton}"
+                            Command="{Binding NavigateToLeasesCommand}"/>
+
+                    <Button Content="📌 Static Bindings" 
+                            Style="{StaticResource NavButton}"
+                            Command="{Binding NavigateToStaticBindingsCommand}"/>
+
+                    <Button Content="⚙️ Settings" 
+                            Style="{StaticResource NavButton}"
+                            Command="{Binding NavigateToSettingsCommand}"/>
+
+                    <Button Content="📝 Logs" 
+                            Style="{StaticResource NavButton}"
+                            Command="{Binding NavigateToLogsCommand}"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Content Area -->
+            <ContentControl Grid.Column="1" 
+                          Content="{Binding CurrentView}"
+                          Margin="20">
+                <ContentControl.Resources>
+                    <DataTemplate DataType="{x:Type vm:DashboardViewModel}">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="*"/>
+                                </Grid.RowDefinitions>
+
+                                <!-- Quick Actions -->
+                                <Border Grid.Row="0" Style="{StaticResource Card}" Margin="0,0,0,20">
+                                    <StackPanel>
+                                        <TextBlock Text="Quick Actions" FontSize="18" FontWeight="Bold" Margin="0,0,0,15"/>
+                                        <StackPanel Orientation="Horizontal">
+                                            <Button Content="▶️ Start Server" 
+                                                  Style="{StaticResource SecondaryButton}"
+                                                  Command="{Binding StartServerCommand}"
+                                                  IsEnabled="{Binding IsServerRunning, Converter={StaticResource InverseBoolConverter}}"
+                                                  Margin="0,0,10,0"/>
+                                            <Button Content="⏸️ Stop Server" 
+                                                  Style="{StaticResource DangerButton}"
+                                                  Command="{Binding StopServerCommand}"
+                                                  IsEnabled="{Binding IsServerRunning}"/>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Stats -->
+                                <Grid Grid.Row="1" Margin="0,0,0,20">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <Border Grid.Column="0" Style="{StaticResource Card}" Margin="0,0,10,0">
+                                        <StackPanel>
+                                            <TextBlock Text="Active Leases" 
+                                                     FontSize="14" 
+                                                     Foreground="{StaticResource TextSecondaryBrush}"/>
+                                            <TextBlock Text="{Binding ActiveLeases}" 
+                                                     FontSize="32" 
+                                                     FontWeight="Bold"
+                                                     Foreground="{StaticResource PrimaryBrush}"/>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <Border Grid.Column="1" Style="{StaticResource Card}" Margin="0,0,10,0">
+                                        <StackPanel>
+                                            <TextBlock Text="Server IP" 
+                                                     FontSize="14" 
+                                                     Foreground="{StaticResource TextSecondaryBrush}"/>
+                                            <TextBlock Text="{Binding ServerIpAddress}" 
+                                                     FontSize="20" 
+                                                     FontWeight="Bold"
+                                                     Foreground="{StaticResource TextPrimaryBrush}"/>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <Border Grid.Column="2" Style="{StaticResource Card}">
+                                        <StackPanel>
+                                            <TextBlock Text="IP Pool Range" 
+                                                     FontSize="14" 
+                                                     Foreground="{StaticResource TextSecondaryBrush}"/>
+                                            <TextBlock Text="{Binding IpPoolRange}" 
+                                                     FontSize="14" 
+                                                     FontWeight="Bold"
+                                                     Foreground="{StaticResource TextPrimaryBrush}"
+                                                     TextWrapping="Wrap"/>
+                                        </StackPanel>
+                                    </Border>
+                                </Grid>
+
+                                <!-- Recent Logs -->
+                                <Border Grid.Row="2" Style="{StaticResource Card}">
+                                    <Grid>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="*"/>
+                                        </Grid.RowDefinitions>
+
+                                        <TextBlock Grid.Row="0" 
+                                                 Text="Recent Activity" 
+                                                 FontSize="18" 
+                                                 FontWeight="Bold" 
+                                                 Margin="0,0,0,15"/>
+
+                                        <ListBox Grid.Row="1" 
+                                               ItemsSource="{Binding RecentLogs}"
+                                               BorderThickness="0"
+                                               Background="Transparent"
+                                               MaxHeight="300">
+                                            <ListBox.ItemTemplate>
+                                                <DataTemplate>
+                                                    <StackPanel Margin="0,5">
+                                                        <TextBlock>
+                                                            <Run Text="{Binding Timestamp, StringFormat='HH:mm:ss'}" 
+                                                                 Foreground="{StaticResource TextSecondaryBrush}"/>
+                                                            <Run Text=" - "/>
+                                                            <Run Text="{Binding Message}"/>
+                                                        </TextBlock>
+                                                    </StackPanel>
+                                                </DataTemplate>
+                                            </ListBox.ItemTemplate>
+                                        </ListBox>
+                                    </Grid>
+                                </Border>
+                            </Grid>
+                        </ScrollViewer>
+                    </DataTemplate>
+
+                    <DataTemplate DataType="{x:Type vm:LeasesViewModel}">
+                        <Border Style="{StaticResource Card}">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="*"/>
+                                </Grid.RowDefinitions>
+
+                                <Grid Grid.Row="0" Margin="0,0,0,15">
+                                    <TextBlock Text="Active DHCP Leases" 
+                                             FontSize="18" 
+                                             FontWeight="Bold"
+                                             VerticalAlignment="Center"/>
+                                    <Button Content="🔄 Refresh" 
+                                          Style="{StaticResource PrimaryButton}"
+                                          Command="{Binding RefreshLeasesCommand}"
+                                          HorizontalAlignment="Right"/>
+                                </Grid>
+
+                                <DataGrid Grid.Row="1" 
+                                        ItemsSource="{Binding Leases}"
+                                        AutoGenerateColumns="False"
+                                        IsReadOnly="True"
+                                        CanUserAddRows="False">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="IP Address" Binding="{Binding IpAddress}" Width="130"/>
+                                        <DataGridTextColumn Header="MAC Address" Binding="{Binding MacAddress}" Width="150"/>
+                                        <DataGridTextColumn Header="Hostname" Binding="{Binding Hostname}" Width="*"/>
+                                        <DataGridTextColumn Header="Lease Start" Binding="{Binding LeaseStart, StringFormat='yyyy-MM-dd HH:mm'}" Width="140"/>
+                                        <DataGridTextColumn Header="Remaining" Binding="{Binding RemainingTime}" Width="120"/>
+                                        <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="80"/>
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+
+                    <DataTemplate DataType="{x:Type vm:StaticBindingsViewModel}">
+                        <Border Style="{StaticResource Card}">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="*"/>
+                                </Grid.RowDefinitions>
+
+                                <TextBlock Grid.Row="0" 
+                                         Text="Static IP Bindings" 
+                                         FontSize="18" 
+                                         FontWeight="Bold" 
+                                         Margin="0,0,0,15"/>
+
+                                <!-- Add New Binding -->
+                                <Border Grid.Row="1" 
+                                      BorderBrush="{StaticResource BorderBrush}" 
+                                      BorderThickness="0,0,0,1"
+                                      Padding="0,0,0,20"
+                                      Margin="0,0,0,20">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <StackPanel Grid.Column="0" Margin="0,0,10,0">
+                                            <Label Content="MAC Address"/>
+                                            <TextBox Text="{Binding NewMacAddress, UpdateSourceTrigger=PropertyChanged}" 
+                                                   ToolTip="Format: AA:BB:CC:DD:EE:FF"/>
+                                        </StackPanel>
+
+                                        <StackPanel Grid.Column="1" Margin="0,0,10,0">
+                                            <Label Content="IP Address"/>
+                                            <TextBox Text="{Binding NewIpAddress, UpdateSourceTrigger=PropertyChanged}"/>
+                                        </StackPanel>
+
+                                        <StackPanel Grid.Column="2" Margin="0,0,10,0">
+                                            <Label Content="Description (Optional)"/>
+                                            <TextBox Text="{Binding NewDescription, UpdateSourceTrigger=PropertyChanged}"/>
+                                        </StackPanel>
+
+                                        <Button Grid.Column="3" 
+                                              Content="➕ Add"
+                                              Style="{StaticResource PrimaryButton}"
+                                              Command="{Binding AddBindingCommand}"
+                                              VerticalAlignment="Bottom"/>
+                                    </Grid>
+                                </Border>
+
+                                <!-- Bindings List -->
+                                <DataGrid Grid.Row="2" 
+                                        ItemsSource="{Binding Bindings}"
+                                        SelectedItem="{Binding SelectedBinding}"
+                                        AutoGenerateColumns="False"
+                                        CanUserAddRows="False">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="MAC Address" Binding="{Binding MacAddress}" Width="150"/>
+                                        <DataGridTextColumn Header="IP Address" Binding="{Binding IpAddress}" Width="130"/>
+                                        <DataGridTextColumn Header="Description" Binding="{Binding Description}" Width="*"/>
+                                        <DataGridTextColumn Header="Created" Binding="{Binding CreatedAt, StringFormat='yyyy-MM-dd HH:mm'}" Width="140"/>
+                                        <DataGridTemplateColumn Header="Actions" Width="100">
+                                            <DataGridTemplateColumn.CellTemplate>
+                                                <DataTemplate>
+                                                    <Button Content="❌ Remove" 
+                                                          Style="{StaticResource DangerButton}"
+                                                          Command="{Binding DataContext.RemoveBindingCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                                          CommandParameter="{Binding}"/>
+                                                </DataTemplate>
+                                            </DataGridTemplateColumn.CellTemplate>
+                                        </DataGridTemplateColumn>
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+
+                    <DataTemplate DataType="{x:Type vm:SettingsViewModel}">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <Border Style="{StaticResource Card}">
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="*"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+
+                                    <TextBlock Grid.Row="0" 
+                                             Text="DHCP Server Settings" 
+                                             FontSize="18" 
+                                             FontWeight="Bold" 
+                                             Margin="0,0,0,20"/>
+
+                                    <StackPanel Grid.Row="1">
+                                        <!-- Network Configuration -->
+                                        <TextBlock Text="Network Configuration" 
+                                                 FontSize="16" 
+                                                 FontWeight="SemiBold" 
+                                                 Margin="0,0,0,10"/>
+
+                                        <Grid Margin="0,0,0,20">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+
+                                            <StackPanel Grid.Column="0" Margin="0,0,10,0">
+                                                <Label Content="Server IP Address"/>
+                                                <TextBox Text="{Binding ServerIpAddress, UpdateSourceTrigger=PropertyChanged}"/>
+
+                                                <Label Content="Subnet Mask" Margin="0,10,0,0"/>
+                                                <TextBox Text="{Binding SubnetMask, UpdateSourceTrigger=PropertyChanged}"/>
+
+                                                <Label Content="Gateway" Margin="0,10,0,0"/>
+                                                <TextBox Text="{Binding Gateway, UpdateSourceTrigger=PropertyChanged}"/>
+                                            </StackPanel>
+
+                                            <StackPanel Grid.Column="1">
+                                                <Label Content="Primary DNS"/>
+                                                <TextBox Text="{Binding PrimaryDns, UpdateSourceTrigger=PropertyChanged}"/>
+
+                                                <Label Content="Secondary DNS" Margin="0,10,0,0"/>
+                                                <TextBox Text="{Binding SecondaryDns, UpdateSourceTrigger=PropertyChanged}"/>
+
+                                                <Label Content="Domain Name" Margin="0,10,0,0"/>
+                                                <TextBox Text="{Binding DomainName, UpdateSourceTrigger=PropertyChanged}"/>
+                                            </StackPanel>
+                                        </Grid>
+
+                                        <!-- IP Pool Configuration -->
+                                        <TextBlock Text="IP Pool Configuration" 
+                                                 FontSize="16" 
+                                                 FontWeight="SemiBold" 
+                                                 Margin="0,0,0,10"/>
+
+                                        <Grid Margin="0,0,0,20">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+
+                                            <StackPanel Grid.Column="0" Margin="0,0,10,0">
+                                                <Label Content="Pool Start IP"/>
+                                                <TextBox Text="{Binding PoolStartIp, UpdateSourceTrigger=PropertyChanged}"/>
+                                            </StackPanel>
+
+                                            <StackPanel Grid.Column="1">
+                                                <Label Content="Pool End IP"/>
+                                                <TextBox Text="{Binding PoolEndIp, UpdateSourceTrigger=PropertyChanged}"/>
+                                            </StackPanel>
+                                        </Grid>
+
+                                        <!-- Lease Configuration -->
+                                        <TextBlock Text="Lease Configuration" 
+                                                 FontSize="16" 
+                                                 FontWeight="SemiBold" 
+                                                 Margin="0,0,0,10"/>
+
+                                        <Grid Margin="0,0,0,20">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+
+                                            <StackPanel Grid.Column="0" Margin="0,0,10,0">
+                                                <Label Content="Default Lease Time (seconds)"/>
+                                                <TextBox Text="{Binding DefaultLeaseTime, UpdateSourceTrigger=PropertyChanged}"/>
+                                            </StackPanel>
+
+                                            <StackPanel Grid.Column="1">
+                                                <Label Content="Max Lease Time (seconds)"/>
+                                                <TextBox Text="{Binding MaxLeaseTime, UpdateSourceTrigger=PropertyChanged}"/>
+                                            </StackPanel>
+                                        </Grid>
+
+                                        <!-- Additional Options -->
+                                        <TextBlock Text="Additional Options" 
+                                                 FontSize="16" 
+                                                 FontWeight="SemiBold" 
+                                                 Margin="0,0,0,10"/>
+
+                                        <CheckBox Content="Enable Action Bridge" 
+                                                IsChecked="{Binding EnableActionBridge}"
+                                                Margin="0,5"/>
+
+                                        <StackPanel Margin="0,10,0,0">
+                                            <Label Content="Action Bridge Port"/>
+                                            <TextBox Text="{Binding ActionBridgePort, UpdateSourceTrigger=PropertyChanged}" 
+                                                   Width="200" 
+                                                   HorizontalAlignment="Left"/>
+                                        </StackPanel>
+
+                                        <CheckBox Content="Auto-start server on application launch" 
+                                                IsChecked="{Binding AutoStart}"
+                                                Margin="0,15,0,0"/>
+                                    </StackPanel>
+
+                                    <!-- Action Buttons -->
+                                    <StackPanel Grid.Row="2" 
+                                              Orientation="Horizontal" 
+                                              HorizontalAlignment="Right"
+                                              Margin="0,20,0,0">
+                                        <Button Content="💾 Save Settings" 
+                                              Style="{StaticResource PrimaryButton}"
+                                              Command="{Binding SaveSettingsCommand}"
+                                              Margin="0,0,10,0"/>
+                                        <Button Content="🔄 Reset to Defaults" 
+                                              Style="{StaticResource DangerButton}"
+                                              Command="{Binding ResetToDefaultsCommand}"/>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                        </ScrollViewer>
+                    </DataTemplate>
+
+                    <DataTemplate DataType="{x:Type vm:LogsViewModel}">
+                        <Border Style="{StaticResource Card}">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="*"/>
+                                </Grid.RowDefinitions>
+
+                                <Grid Grid.Row="0" Margin="0,0,0,15">
+                                    <TextBlock Text="Server Logs" 
+                                             FontSize="18" 
+                                             FontWeight="Bold"
+                                             VerticalAlignment="Center"/>
+                                    <Button Content="🗑️ Clear Logs" 
+                                          Style="{StaticResource DangerButton}"
+                                          Command="{Binding ClearLogsCommand}"
+                                          HorizontalAlignment="Right"/>
+                                </Grid>
+
+                                <ListBox Grid.Row="1" 
+                                       ItemsSource="{Binding Logs}"
+                                       BorderThickness="1"
+                                       BorderBrush="{StaticResource BorderBrush}">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <StackPanel Margin="5">
+                                                <TextBlock>
+                                                    <Run Text="[" Foreground="{StaticResource TextSecondaryBrush}"/>
+                                                    <Run Text="{Binding Timestamp, StringFormat='yyyy-MM-dd HH:mm:ss'}" 
+                                                         Foreground="{StaticResource TextSecondaryBrush}"/>
+                                                    <Run Text="]" Foreground="{StaticResource TextSecondaryBrush}"/>
+                                                    <Run Text=" "/>
+                                                    <Run Text="{Binding Message}"/>
+                                                </TextBlock>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ContentControl.Resources>
+            </ContentControl>
+        </Grid>
+
+        <!-- Status Bar -->
+        <Border Grid.Row="2" 
+                Background="White" 
+                BorderBrush="{StaticResource BorderBrush}" 
+                BorderThickness="0,1,0,0"
+                Padding="20,10">
+            <Grid>
+                <TextBlock Text="© 2024 DHCP Server Management - Professional Edition" 
+                         FontSize="12" 
+                         Foreground="{StaticResource TextSecondaryBrush}"/>
+                <TextBlock Text="Ready" 
+                         FontSize="12" 
+                         Foreground="{StaticResource TextSecondaryBrush}"
+                         HorizontalAlignment="Right"/>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>
