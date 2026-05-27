@@ -31,4 +31,28 @@ public interface ITransferEngine
         TransferOptions options,
         IProgress<TransferProgress>? progress = null,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Transfer một file đến nhiều destinations với progress tracking riêng cho từng destination.
+    /// Hỗ trợ xử lý slow connection để tránh ảnh hưởng đến các destination khác.
+    /// </summary>
+    Task<MultiDestinationTransferResult> TransferMultiDestinationWithIndividualProgressAsync(
+        string sourcePath,
+        IReadOnlyList<string> destinationPaths,
+        TransferOptions options,
+        SlowConnectionPolicy? slowPolicy = null,
+        IProgress<AggregatedMultiDestinationProgress>? progress = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Transfer toàn bộ directory đến nhiều destinations với progress tracking riêng.
+    /// Các file được transfer song song tới tất cả destinations.
+    /// </summary>
+    Task<DirectoryMultiDestinationTransferResult> TransferDirectoryMultiDestinationAsync(
+        string sourceDirectory,
+        IReadOnlyList<string> destinationDirectories,
+        TransferOptions options,
+        SlowConnectionPolicy? slowPolicy = null,
+        IProgress<DirectoryTransferProgress>? progress = null,
+        CancellationToken cancellationToken = default);
 }
