@@ -1,725 +1,303 @@
-# Workflow: Tìm folder trên server theo file .hash, copy về local, verify, rồi phát tán ra nhiều destination
+# Workflow: Sinh bộ file theo cấu trúc `ABCD.hash`, `ABCD.whd`, `ABCD.wcl`, `ABCD.wxx`
 
-Tài liệu này mô tả cách sử dụng SmbEnterprise để thực hiện quy trình sau:
+Tài liệu này mô tả workflow và yêu cầu implementation cho một script dùng để sinh ra một bộ file dữ liệu theo đúng cấu trúc nghiệp vụ đã chốt.
 
-1. Duyệt recursive toàn bộ cây thư mục trên server để lấy đầy đủ danh sách các folder thỏa rule của file `.hash`.
-2. Copy cả folder đó từ SMB về local.
-3. Verify các file local bằng hash đã có trong file `.hash`.
-4. Copy từng file được liệt kê trong `.hash` đến nhiều destination.
-5. Sau mỗi lần copy, tính lại checksum ở destination và so sánh với hash trong file `.hash`.
-6. Nếu checksum đúng thì chuyển sang file tiếp theo.
-7. Nếu checksum local hoặc checksum destination sai thì xóa file lỗi và copy lại tối đa 3 lần.
-8. Nếu sau 3 lần vẫn fail thì dừng toàn bộ workflow và gửi thông báo lỗi.
-9. Nếu toàn bộ file đều copy và checksum thành công thì gửi thông báo hoàn tất.
+Mục tiêu của script:
 
-## 1. Phạm vi và giả định
+1. Tạo một thư mục đầu ra hợp lệ.
+2. Tạo trong thư mục đó một bộ file dùng chung một tên gốc hợp lệ.
+3. Sinh file `.whd` dung lượng `100KB`.
+4. Sinh file `.wcl` dung lượng `1GB`.
+5. Sinh từ `5` đến `12` file `.wxx`, trong đó các file trước file cuối có dung lượng `1GB`, còn file cuối có thể nhỏ hơn.
+6. Tính MD5 cho file `.wcl` và toàn bộ file `.wxx`.
+7. Ghi file `.hash` theo đúng format `[HASH]` với cặp khóa/giá trị `wcl=<md5>` và `wxx=<md5>`.
 
-Thư viện đã có sẵn các capability cần thiết sau:
+## 1. Phạm vi và đầu ra mong muốn
 
-- `IRemoteFileSystem` để trừu tượng hóa SMB, local disk hoặc storage khác.
-- `ListDirectoryAsync()` để duyệt folder trên server.
-- `OpenReadAsync()` để đọc nội dung file `.hash` và tính checksum từ stream.
-- `GetMetadataAsync()` để lấy metadata của file.
-- `TransferEngine.TransferDirectoryAsync()` để copy đệ quy cả thư mục đến một đích.
-- `TransferEngine.TransferMultiDestinationAsync()` để copy một file đến nhiều đích cùng lúc.
-- `IProgress<TransferProgress>` để báo tiến độ trong quá trình copy.
-- `DeleteFileAsync()` để xóa file lỗi tại destination trước khi copy lại.
+Script phải tạo đúng một bộ file trong một thư mục đầu ra. Một bộ hợp lệ gồm:
 
-Thư viện hiện chưa có sẵn một API riêng cho:
-
-- parse file `.hash` theo format nghiệp vụ cụ thể;
-- tìm folder hợp lệ theo rule basename + extension + sự hiện diện đầy đủ file;
-- copy "cả directory đến nhiều destination" trong một lệnh duy nhất;
-- retry publish theo rule nghiệp vụ "checksum sai thì xóa file đích rồi copy lại tối đa 3 lần";
-- cơ chế notification hoàn tất hoặc thất bại;
-- progress riêng cho từng destination trong một lần gọi `TransferMultiDestinationAsync()`.
-
-Điểm cuối cùng cần nói rõ: với API hiện tại, `TransferMultiDestinationAsync()` phù hợp để hiển thị progress cho một lần publish của một file ra nhiều đích. Nếu bắt buộc phải có progress tách riêng theo từng destination, ứng dụng cần:
-
-- hoặc publish từng destination bằng `TransferAsync()`;
-- hoặc mở rộng engine để emit progress per-destination.
-
-## 2. Định nghĩa file `.hash`
-
-Folder hợp lệ phải chứa đúng một file có phần mở rộng `.hash`. Nội dung file này có dạng:
-
-```text
-.wcl: HASH_WCL
-.w01: HASH_W01
-.w02: HASH_W02
-...
-.w0x: HASH_W0X
-```
-
-Ý nghĩa của file `.hash` trong workflow này:
-
-- mỗi dòng ánh xạ một extension sang một checksum chuẩn;
-- các file dữ liệu phải có cùng basename với file `.hash`;
-- basename này áp dụng cho toàn bộ nhóm file, bao gồm cả chính file `.hash`.
-
-Ví dụ, nếu trong folder có file `package.hash` thì các file được phép tham gia workflow phải là:
-
-- `package.wcl`
-- `package.w01`
-- `package.w02`
+- `ABCD.hash`
+- `ABCD.whd`
+- `ABCD.wcl`
+- `ABCD.w01`
+- `ABCD.w02`
 - ...
+- `ABCD.wxx`
 
-và trong `package.hash` sẽ có nội dung như:
+Trong đó:
 
-```text
-.wcl: 9F6EAA4F7E8C1D6A7DF2F4E8A58A7DA2E18B4D7B45B4E9C38E0A1A998A13C0A1
-.w01: FF3CC09B3D1A0DE418F4B6F81D9D8723A74CA7A8D88F11D104E91B50A28F9E6F
-.w02: 8A3B4F919A838EF720F1C0FA1278540F1234567890ABCDEF1234567890ABCDEF
+- `ABCD` là tên gốc của bộ file.
+- `xx` là số thứ tự từ `01` đến tối đa `12`.
+- Tổng số file `.wxx` phải nằm trong khoảng từ `5` đến `12`.
+
+Script không cần phát sinh thêm file ngoài nhóm trên, trừ khi có yêu cầu cấu hình riêng ở tầng ứng dụng gọi script.
+
+## 2. Quy tắc đặt tên
+
+Tên hợp lệ có dạng nghiệp vụ:
+
+- Có dấu `-`: `SGLC123A01-C01-G001-S0001`
+- Không có dấu `-`: `SGLC123A01C01G001S0001`
+
+Các quy tắc bắt buộc:
+
+1. Tên thư mục đầu ra phải là một tên hợp lệ theo một trong hai dạng trên.
+2. Tên gốc của bộ file cũng phải là một tên hợp lệ theo một trong hai dạng trên.
+3. Tên thư mục và tên gốc file không bắt buộc phải giống nhau.
+4. Trong cùng một bộ file, `.hash`, `.whd`, `.wcl` và toàn bộ `.wxx` phải dùng đúng cùng một tên gốc.
+5. Nếu đã chọn kiểu tên có dấu `-` hoặc không có dấu `-` cho bộ file thì toàn bộ file trong bộ phải đồng nhất theo đúng tên gốc đó.
+
+Ví dụ hợp lệ:
+
+- Tên folder: `SGLC123A01C01G001S0001`
+- Tên gốc bộ file: `SGLC123A01-C01-G001-S0001`
+
+## 3. Quy tắc số lượng và dung lượng file
+
+Script phải tuân thủ các ràng buộc sau:
+
+### 3.1. File cố định
+
+- `ABCD.whd`: dung lượng đúng `100KB`
+- `ABCD.wcl`: dung lượng đúng `1GB`
+
+### 3.2. File dữ liệu chia nhỏ `ABCD.wxx`
+
+1. Tổng số file `.wxx` nằm trong khoảng từ `5` đến `12`.
+2. Các file từ `w01` đến `w(xx-1)` phải có dung lượng đúng `1GB`.
+3. File cuối `wxx` có thể nhỏ hơn `1GB`.
+4. Nếu người dùng cấu hình file cuối cũng bằng `1GB` thì trường hợp đó vẫn hợp lệ.
+
+Cách hiểu nghiệp vụ của nhóm `.wxx`:
+
+- Đây là kết quả của việc cắt một file lớn thành nhiều phần.
+- `xx - 1` phần đầu là các phần đầy đủ `1GB`.
+- Phần cuối là phần còn lại, nên thường nhỏ hơn `1GB`.
+
+## 4. Format file `.hash`
+
+File `ABCD.hash` phải có nội dung theo đúng cấu trúc sau:
+
+```ini
+[HASH]
+wcl=<hash md5 của file ABCD.wcl>
+w01=<hash md5 của file ABCD.w01>
+w02=<hash md5 của file ABCD.w02>
+...
+wxx=<hash md5 của file ABCD.wxx>
 ```
 
-## 3. Logic xác định folder hợp lệ trên server
+Quy tắc ghi file `.hash`:
 
-Một folder trên server được xem là hợp lệ khi đồng thời thỏa tất cả điều kiện sau:
-
-1. Trong folder có đúng một file `.hash`.
-2. Tên file `.hash` xác định basename chung cho cả nhóm file. Ví dụ `package.hash` thì basename là `package`.
-3. Mỗi dòng trong file `.hash` phải có format `<extension>: <hash>`, trong đó extension có dạng `.wcl`, `.w01`, `.w02`, ...
-4. Với mỗi extension trong file `.hash`, trong folder phải tồn tại đúng file tương ứng với cùng basename. Ví dụ `.w01` thì phải có `package.w01`.
-
-Lưu ý: ở bước tìm kiếm này không cần checksum trên remote server. Việc checksum chỉ thực hiện sau khi copy về local.
-
-Kết quả của bước tìm kiếm phải trả về danh sách các folder hợp lệ, trong đó mỗi phần tử gồm:
-
-- `remoteFolderPath`: folder nguồn hợp lệ trên server;
-- `hashFilePath`: đường dẫn đến file `.hash`;
-- `manifestEntries`: danh sách file thực tế cần copy và checksum.
-
-Người dùng hoặc tầng ứng dụng phía trên sẽ tự chọn một folder trong danh sách này theo logic riêng.
-
-## 4. Kiến trúc đề xuất cho workflow
-
-Nên dùng các đối tượng sau:
-
-- `sourceSmbFs`: SMB chứa folder nguồn.
-- `localFs`: local disk để staging và kiểm tra trung gian. Có thể dùng implementation mẫu tại `samples/SmbEnterprise.WinFormsApp/Services/LocalFileSystem.cs`.
-- `destinationFileSystems`: một danh sách đích, mỗi đích là một `IRemoteFileSystem` riêng.
-- `hashManifest`: dữ liệu parse từ file `.hash`.
-- `notificationService`: thành phần ứng dụng dùng để gửi thông báo thành công hoặc thất bại.
-
-## 5. Trình tự xử lý khuyến nghị
-
-### Bước 1: Duyệt recursive để lấy đầy đủ danh sách folder hợp lệ trên server theo file `.hash`
-
-Ứng dụng phải duyệt đệ quy toàn bộ cây thư mục trên SMB bắt đầu từ `remoteRoot`. Với mỗi folder ứng viên tìm được trong quá trình duyệt recursive, workflow sẽ thực hiện các bước:
-
-1. Tìm file `.hash` trong folder.
-2. Kiểm tra folder chỉ có đúng một file `.hash`.
-3. Lấy basename từ file `.hash`.
-4. Đọc nội dung file `.hash` và parse thành danh sách `<extension, checksum>`.
-5. Từ mỗi extension, suy ra tên file đích theo công thức `<basename><extension>`.
-6. Kiểm tra các file tương ứng có tồn tại trong folder.
-7. Nếu folder có đủ các file theo danh sách trong `.hash` thì xem là folder hợp lệ.
-
-Kết quả của bước này là một danh sách `candidateFolders` đầy đủ trong toàn bộ cây thư mục bên dưới `remoteRoot`, không phải chỉ các folder con trực tiếp ở cấp đầu tiên.
-
-Workflow không tự chọn folder cuối cùng ở bước này. Thay vào đó:
-
-1. tầng ứng dụng trả danh sách candidate folders ra UI hoặc lớp nghiệp vụ;
-2. người dùng hoặc business logic riêng sẽ chọn một folder cụ thể;
-3. folder được chọn sẽ trở thành `remoteFolderPath` để chạy các bước tiếp theo.
-
-### Bước 2: Copy cả folder nguồn về local
-
-Sau khi người dùng hoặc business logic chọn được `remoteFolderPath`, dùng `TransferEngine` với `sourceSmbFs` làm nguồn và `localFs` làm đích:
-
-```csharp
-var downloadEngine = new TransferEngine(
-	sourceSmbFs,
-	new IRemoteFileSystem[] { localFs },
-	logger);
-
-var downloadResult = await downloadEngine.TransferDirectoryAsync(
-	sourceDirectory: selectedFolder.RemoteFolderPath,
-	destinationDirectory: localFolderPath,
-	options: new TransferOptions
-	{
-		Resume = true,
-		Overwrite = true,
-		VerifyAfterCopy = false,
-		ChecksumAlgorithm = ChecksumAlgorithm.Sha256
-	},
-	cancellationToken: ct);
-
-if (!downloadResult.Success)
-{
-	throw new InvalidOperationException(downloadResult.ErrorMessage);
-}
-```
-
-### Bước 3: Verify các file local bằng file `.hash`
-
-Sau khi copy xong về local, chỉ verify các file đã được liệt kê trong file `.hash`:
-
-1. file local phải tồn tại;
-2. `GetMetadataAsync()` phải trả về đúng `Size` nếu kích thước đã được biết;
-3. tính checksum file local;
-4. so checksum local với checksum tương ứng trong `.hash`.
-
-Nếu có file local nào không khớp checksum thì không chuyển sang bước publish ngay. Thay vào đó:
-
-1. xóa file local lỗi;
-2. copy lại riêng file đó từ remote về local;
-3. checksum lại;
-4. lặp tối đa 3 lần cho từng file lỗi.
-
-Nếu sau 3 lần file local vẫn sai checksum thì workflow dừng và gửi thông báo lỗi.
-
-### Bước 4: Copy từng file đến nhiều destination
-
-Không nên duyệt mù toàn bộ folder local. Nên duyệt đúng danh sách file đã parse từ `.hash`.
-
-Với mỗi file trong manifest:
-
-1. tạo path local tương ứng;
-2. map sang danh sách destination path cho tất cả destination roots;
-3. tạo progress reporter cho lần publish hiện tại;
-4. gọi `TransferMultiDestinationAsync()`;
-5. verify từng destination theo checksum trong `.hash`.
+1. Dòng đầu tiên luôn là `[HASH]`.
+2. Phải có khóa `wcl`.
+3. Phải có đầy đủ các khóa từ `w01` đến `wxx` theo đúng số file thực tế đã tạo.
+4. Không ghi entry cho file `.whd`.
+5. Giá trị mỗi dòng là MD5 dạng hex của đúng file tương ứng.
+6. Thứ tự khuyến nghị khi ghi là `wcl`, sau đó `w01`, `w02`, ... đến `wxx`.
 
 Ví dụ:
 
-```csharp
-foreach (var entry in selectedFolder.ManifestEntries)
-{
-	var localFile = Path.Combine(localFolderPath, entry.FileName);
-	var destinationPaths = destinationRoots
-		.Select(root => Path.Combine(root, entry.FileName))
-		.ToArray();
-
-	var progress = new Progress<TransferProgress>(p =>
-	{
-		Console.WriteLine($"[{entry.FileName}] {p.PercentComplete:F2}% - {p.BytesTransferred}/{p.TotalBytes} bytes");
-	});
-
-	await publishEngine.TransferMultiDestinationAsync(
-		sourcePath: localFile,
-		destinationPaths: destinationPaths,
-		options: new TransferOptions
-		{
-			Resume = true,
-			Overwrite = true,
-			VerifyAfterCopy = false,
-			ChecksumAlgorithm = ChecksumAlgorithm.Sha256
-		},
-		progress: progress,
-		cancellationToken: ct);
-}
+```ini
+[HASH]
+wcl=d41d8cd98f00b204e9800998ecf8427e
+w01=0cc175b9c0f1b6a831c399e269772661
+w02=92eb5ffee6ae2fec3ad71c777531578f
+w03=4a8a08f09d37b73795649038408b5f33
+w04=8277e0910d750195b448797616e091ad
+w05=e1671797c52e15f763380b45e841ec32
 ```
 
-### Bước 5: Verify từng destination, xóa file lỗi và retry tối đa 3 lần
+## 5. Trình tự xử lý khuyến nghị
 
-Sau mỗi lần publish một file:
+Script nên xử lý theo đúng thứ tự sau để tránh sai lệch giữa nội dung file và checksum:
 
-1. Lấy metadata tại từng destination bằng `GetMetadataAsync()`.
-2. Tính checksum thực tế của file tại từng destination.
-3. So checksum thực tế với checksum trong file `.hash`.
-4. Nếu checksum sai ở bất kỳ destination nào, xóa file lỗi tại destination đó bằng `DeleteFileAsync()`.
-5. Copy lại file đó.
-6. Lặp tối đa 3 lần.
-7. Nếu sau 3 lần vẫn còn lỗi, dừng toàn bộ workflow và gửi thông báo thất bại.
+### Bước 1: Nhận và validate input
 
-Để bám sát yêu cầu nghiệp vụ, hash chuẩn phải luôn lấy từ file `.hash`, không lấy từ checksum của bản local sau khi copy.
+Input tối thiểu nên gồm:
 
-### Bước 6: Gửi thông báo kết quả workflow
+- đường dẫn thư mục cha đầu ra;
+- tên folder cần tạo;
+- tên gốc bộ file;
+- số lượng file `.wxx` từ `5` đến `12`;
+- dung lượng file cuối cùng `wxx`.
 
-Workflow cần có 2 loại thông báo:
+Ở bước này cần validate:
 
-- thông báo thất bại: gửi ngay khi không tìm được folder hợp lệ, local verify fail, hoặc publish fail sau 3 lần;
-- thông báo thành công: gửi khi toàn bộ file trong `.hash` đã copy và verify thành công ở mọi destination.
+1. Tên folder hợp lệ theo rule nghiệp vụ.
+2. Tên gốc bộ file hợp lệ theo rule nghiệp vụ.
+3. Số lượng file `.wxx` nằm trong khoảng `5..12`.
+4. Dung lượng file cuối lớn hơn `0` và không vượt quá `1GB`.
 
-## 6. Skeleton code để xây workflow end-to-end
+### Bước 2: Tạo thư mục đầu ra
 
-Đoạn code dưới đây là skeleton để mô tả đúng thứ tự xử lý. Đây là workflow sample, không phải implementation production-ready hoàn chỉnh.
+Tạo thư mục theo tên folder đã chọn bên dưới thư mục cha đầu ra.
 
-```csharp
-using Microsoft.Extensions.Logging;
-using SmbEnterprise.Checksum;
-using SmbEnterprise.Core.Abstractions;
-using SmbEnterprise.Core.Models;
-using SmbEnterprise.Transfer;
+Ví dụ:
 
-public sealed record HashManifestEntry(
-	string Extension,
-	string FileName,
-	string Checksum);
-
-public sealed record FolderSearchResult(
-	string RemoteFolderPath,
-	string HashFilePath,
-	IReadOnlyList<HashManifestEntry> ManifestEntries);
-
-public interface INotificationService
-{
-	Task NotifySuccessAsync(string message, CancellationToken ct = default);
-	Task NotifyFailureAsync(string message, CancellationToken ct = default);
-}
-
-public sealed class FolderReplicationWorkflow
-{
-	private readonly ILogger<FolderReplicationWorkflow> _logger;
-	private readonly ILogger<TransferEngine> _transferLogger;
-	private readonly INotificationService _notificationService;
-	private readonly IChecksumEngine _checksumEngine;
-
-	public FolderReplicationWorkflow(
-		ILogger<FolderReplicationWorkflow> logger,
-		ILogger<TransferEngine> transferLogger,
-		INotificationService notificationService,
-		IChecksumEngine checksumEngine)
-	{
-		_logger = logger;
-		_transferLogger = transferLogger;
-		_notificationService = notificationService;
-		_checksumEngine = checksumEngine;
-	}
-
-	public async Task ExecuteAsync(
-		IRemoteFileSystem sourceSmbFs,
-		IRemoteFileSystem localFs,
-		IReadOnlyList<IRemoteFileSystem> destinationFileSystems,
-		FolderSearchResult selectedFolder,
-		string localFolderPath,
-		IReadOnlyList<string> destinationRoots,
-		CancellationToken ct = default)
-	{
-		try
-		{
-			var downloadEngine = new TransferEngine(
-				sourceSmbFs,
-				new IRemoteFileSystem[] { localFs },
-				_transferLogger);
-
-			var downloadResult = await downloadEngine.TransferDirectoryAsync(
-				selectedFolder.RemoteFolderPath,
-				localFolderPath,
-				new TransferOptions
-				{
-					Resume = true,
-					Overwrite = true,
-					VerifyAfterCopy = false,
-					ChecksumAlgorithm = ChecksumAlgorithm.Sha256
-				},
-				cancellationToken: ct);
-
-			if (!downloadResult.Success)
-			{
-				throw new InvalidOperationException(downloadResult.ErrorMessage);
-			}
-
-			await VerifyLocalFilesWithRetryAsync(
-				sourceSmbFs,
-				localFs,
-				selectedFolder.RemoteFolderPath,
-				localFolderPath,
-				selectedFolder.ManifestEntries,
-				ct);
-
-			var publishEngine = new TransferEngine(localFs, destinationFileSystems, _transferLogger);
-			await PublishFilesAsync(
-				localFs,
-				destinationFileSystems,
-				publishEngine,
-				localFolderPath,
-				destinationRoots,
-				selectedFolder.ManifestEntries,
-				ct);
-
-			await _notificationService.NotifySuccessAsync("Toàn bộ file trong .hash đã copy và checksum thành công.", ct);
-		}
-		catch (Exception ex)
-		{
-			await _notificationService.NotifyFailureAsync($"Workflow thất bại: {ex.Message}", ct);
-			throw;
-		}
-	}
-
-	public async Task<IReadOnlyList<FolderSearchResult>> FindCandidateFoldersAsync(
-		IRemoteFileSystem sourceSmbFs,
-		string remoteRoot,
-		CancellationToken ct)
-	{
-		var candidates = new List<FolderSearchResult>();
-
-		// Duyệt đệ quy toàn bộ cây thư mục để lấy đầy đủ candidate folders.
-		await foreach (var folder in EnumerateDirectoriesRecursiveAsync(sourceSmbFs, remoteRoot, ct))
-		{
-			var validation = await TryValidateHashFolderAsync(sourceSmbFs, folder.FullPath, ct);
-			if (validation is not null)
-			{
-				candidates.Add(validation);
-			}
-		}
-
-		return candidates;
-	}
-
-	private async Task<FolderSearchResult?> TryValidateHashFolderAsync(
-		IRemoteFileSystem fs,
-		string folderPath,
-		CancellationToken ct)
-	{
-		var items = new List<FileItem>();
-		await foreach (var item in fs.ListDirectoryAsync(folderPath, ct))
-		{
-			items.Add(item);
-		}
-
-		var hashFiles = items
-			.Where(x => !x.IsDirectory && Path.GetExtension(x.Name).Equals(".hash", StringComparison.OrdinalIgnoreCase))
-			.ToList();
-
-		if (hashFiles.Count != 1)
-		{
-			return null;
-		}
-
-		var hashFile = hashFiles[0];
-		var baseName = Path.GetFileNameWithoutExtension(hashFile.Name);
-		var manifestEntries = await ParseHashManifestAsync(fs, hashFile.FullPath, baseName, ct);
-
-		foreach (var entry in manifestEntries)
-		{
-			var fileItem = items.FirstOrDefault(x =>
-				!x.IsDirectory &&
-				x.Name.Equals(entry.FileName, StringComparison.OrdinalIgnoreCase));
-
-			if (fileItem is null)
-			{
-				return null;
-			}
-		}
-
-		return new FolderSearchResult(folderPath, hashFile.FullPath, manifestEntries);
-	}
-
-	public static FolderSearchResult SelectFolder(
-		IReadOnlyList<FolderSearchResult> candidates,
-		Func<IReadOnlyList<FolderSearchResult>, FolderSearchResult> selectionPolicy)
-	{
-		if (candidates.Count == 0)
-		{
-			throw new InvalidOperationException("Không có folder nào hợp lệ để chọn.");
-		}
-
-		return selectionPolicy(candidates);
-	}
-
-	private async Task<IReadOnlyList<HashManifestEntry>> ParseHashManifestAsync(
-		IRemoteFileSystem fs,
-		string hashFilePath,
-		string baseName,
-		CancellationToken ct)
-	{
-		var content = await ReadAllTextAsync(fs, hashFilePath, ct);
-		var lines = content.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
-		var result = new List<HashManifestEntry>();
-
-		foreach (var rawLine in lines)
-		{
-			var line = rawLine.Trim();
-			var parts = line.Split(':', 2, StringSplitOptions.TrimEntries);
-			if (parts.Length != 2)
-			{
-				throw new InvalidOperationException($"Dòng không hợp lệ trong file .hash: {line}");
-			}
-
-			var extension = parts[0];
-			var checksum = parts[1];
-			if (!extension.StartsWith('.', StringComparison.Ordinal))
-			{
-				throw new InvalidOperationException($"Extension không hợp lệ trong file .hash: {extension}");
-			}
-
-			result.Add(new HashManifestEntry(
-				Extension: extension,
-				FileName: baseName + extension,
-				Checksum: checksum));
-		}
-
-		return result;
-	}
-
-	private async Task VerifyLocalFilesWithRetryAsync(
-		IRemoteFileSystem sourceSmbFs,
-		IRemoteFileSystem localFs,
-		string remoteFolderPath,
-		string localFolderPath,
-		IReadOnlyList<HashManifestEntry> manifestEntries,
-		CancellationToken ct)
-	{
-		foreach (var entry in manifestEntries)
-		{
-			var verified = false;
-
-			for (int attempt = 1; attempt <= 3; attempt++)
-			{
-				var localFile = Path.Combine(localFolderPath, entry.FileName);
-				var meta = await localFs.GetMetadataAsync(localFile, ct);
-				var checksum = await ComputeChecksumAsync(localFs, localFile, meta.Size, ct);
-
-				if (checksum.Equals(entry.Checksum, StringComparison.OrdinalIgnoreCase))
-				{
-					verified = true;
-					break;
-				}
-
-				if (await localFs.ExistsAsync(localFile, ct))
-				{
-					await localFs.DeleteFileAsync(localFile, ct);
-				}
-
-				var remoteFile = Path.Combine(remoteFolderPath, entry.FileName);
-				await CopySingleFileAsync(sourceSmbFs, remoteFile, localFs, localFile, ct);
-			}
-
-			if (!verified)
-			{
-				throw new InvalidOperationException($"Local checksum mismatch after 3 attempts for {entry.FileName}");
-			}
-		}
-	}
-
-	private async Task PublishFilesAsync(
-		IRemoteFileSystem localFs,
-		IReadOnlyList<IRemoteFileSystem> destinationFileSystems,
-		TransferEngine publishEngine,
-		string localFolderPath,
-		IReadOnlyList<string> destinationRoots,
-		IReadOnlyList<HashManifestEntry> manifestEntries,
-		CancellationToken ct)
-	{
-		foreach (var entry in manifestEntries)
-		{
-			var localFile = Path.Combine(localFolderPath, entry.FileName);
-			var success = false;
-
-			for (int attempt = 1; attempt <= 3; attempt++)
-			{
-				var destinationPaths = destinationRoots
-					.Select(root => Path.Combine(root, entry.FileName))
-					.ToArray();
-
-				var progress = new Progress<TransferProgress>(p =>
-				{
-					_logger.LogInformation(
-						"Copying {File} attempt {Attempt}/3: {Percent:F2}% {Bytes}/{Total} bytes",
-						entry.FileName,
-						attempt,
-						p.PercentComplete,
-						p.BytesTransferred,
-						p.TotalBytes);
-				});
-
-				var result = await publishEngine.TransferMultiDestinationAsync(
-					localFile,
-					destinationPaths,
-					new TransferOptions
-					{
-						Resume = true,
-						Overwrite = true,
-						VerifyAfterCopy = false,
-						ChecksumAlgorithm = ChecksumAlgorithm.Sha256
-					},
-					progress: progress,
-					cancellationToken: ct);
-
-				if (result.Results.Any(x => !x.transferResult.Success))
-				{
-					await DeleteDestinationFilesAsync(destinationFileSystems, destinationPaths, ct);
-					if (attempt == 3)
-					{
-						throw new InvalidOperationException($"Copy failed after 3 attempts for {entry.FileName}");
-					}
-
-					continue;
-				}
-
-				var verifyOk = await VerifyDestinationFilesAsync(
-					destinationFileSystems,
-					destinationPaths,
-					entry,
-					ct);
-
-				if (verifyOk)
-				{
-					success = true;
-					break;
-				}
-
-				await DeleteDestinationFilesAsync(destinationFileSystems, destinationPaths, ct);
-				if (attempt == 3)
-				{
-					throw new InvalidOperationException($"Checksum failed after 3 attempts for {entry.FileName}");
-				}
-			}
-
-			if (!success)
-			{
-				throw new InvalidOperationException($"Workflow stopped because file {entry.FileName} could not be published successfully.");
-			}
-		}
-	}
-
-	private async Task<bool> VerifyDestinationFilesAsync(
-		IReadOnlyList<IRemoteFileSystem> destinationFileSystems,
-		IReadOnlyList<string> destinationPaths,
-		HashManifestEntry entry,
-		CancellationToken ct)
-	{
-		for (int i = 0; i < destinationFileSystems.Count; i++)
-		{
-			var meta = await destinationFileSystems[i].GetMetadataAsync(destinationPaths[i], ct);
-			var checksum = await ComputeChecksumAsync(destinationFileSystems[i], destinationPaths[i], meta.Size, ct);
-			if (!checksum.Equals(entry.Checksum, StringComparison.OrdinalIgnoreCase))
-			{
-				return false;
-			}
-		}
-
-		return true;
-	}
-
-	private async Task DeleteDestinationFilesAsync(
-		IReadOnlyList<IRemoteFileSystem> destinationFileSystems,
-		IReadOnlyList<string> destinationPaths,
-		CancellationToken ct)
-	{
-		for (int i = 0; i < destinationFileSystems.Count; i++)
-		{
-			try
-			{
-				if (await destinationFileSystems[i].ExistsAsync(destinationPaths[i], ct))
-				{
-					await destinationFileSystems[i].DeleteFileAsync(destinationPaths[i], ct);
-				}
-			}
-			catch (Exception ex)
-			{
-				_logger.LogWarning(ex, "Không thể xóa file lỗi tại destination {DestinationPath}", destinationPaths[i]);
-			}
-		}
-	}
-
-	private static async Task CopySingleFileAsync(
-		IRemoteFileSystem sourceFs,
-		string sourcePath,
-		IRemoteFileSystem destinationFs,
-		string destinationPath,
-		CancellationToken ct)
-	{
-		await using var sourceStream = await sourceFs.OpenReadAsync(sourcePath, 0, ct);
-		await using var destinationStream = await destinationFs.OpenWriteAsync(destinationPath, 0, createNew: true, cancellationToken: ct);
-		var buffer = new byte[128 * 1024];
-
-		while (true)
-		{
-			var read = await sourceStream.ReadAsync(buffer, ct);
-			if (read == 0)
-			{
-				break;
-			}
-
-			await destinationStream.WriteAsync(buffer.AsMemory(0, read), ct);
-		}
-
-		await destinationStream.FlushAsync(ct);
-	}
-
-	private async Task<string> ComputeChecksumAsync(
-		IRemoteFileSystem fs,
-		string filePath,
-		long fileSize,
-		CancellationToken ct)
-	{
-		await using var stream = await fs.OpenReadAsync(filePath, 0, ct);
-
-		var checksum = await _checksumEngine.ComputeFileAsync(
-			filePath,
-			async (offset, buffer, token) =>
-			{
-				await stream.SeekAsync(offset, token);
-				return await stream.ReadAsync(buffer, token);
-			},
-			fileSize,
-			ct);
-
-		return checksum.HexHash;
-	}
-
-	private static async Task<string> ReadAllTextAsync(
-		IRemoteFileSystem fs,
-		string path,
-		CancellationToken ct)
-	{
-		await using var stream = await fs.OpenReadAsync(path, 0, ct);
-		using var ms = new MemoryStream();
-		var buffer = new byte[16 * 1024];
-
-		while (true)
-		{
-			var read = await stream.ReadAsync(buffer, ct);
-			if (read == 0)
-			{
-				break;
-			}
-
-			await ms.WriteAsync(buffer.AsMemory(0, read), ct);
-		}
-
-		return System.Text.Encoding.UTF8.GetString(ms.ToArray());
-	}
-
-	private static async IAsyncEnumerable<FileItem> EnumerateDirectoriesRecursiveAsync(
-		IRemoteFileSystem fs,
-		string root,
-		[System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
-	{
-		await foreach (var entry in fs.ListDirectoryAsync(root, ct))
-		{
-			ct.ThrowIfCancellationRequested();
-
-			if (!entry.IsDirectory)
-			{
-				continue;
-			}
-
-			yield return entry;
-
-			await foreach (var child in EnumerateDirectoriesRecursiveAsync(fs, entry.FullPath, ct))
-			{
-				yield return child;
-			}
-		}
-	}
-}
+```text
+<output-root>\\SGLC123A01C01G001S0001
 ```
 
-## 7. Điểm cần chốt trong implementation thực tế
+Nếu thư mục đã tồn tại thì implementation thực tế cần quyết định rõ một trong các cách sau:
 
-- Nếu trong folder có file ngoài nhóm basename đang xét, cần quyết định rõ là bỏ qua hay xem đó là invalid folder. Workflow ở đây chỉ yêu cầu các file được liệt kê trong `.hash` phải hợp lệ.
-- Nếu file `.hash` có dòng trùng extension, nên coi đó là manifest lỗi và loại folder này.
-- Nếu folder có rất nhiều file, nên tách logging và reporting theo cấp `file -> attempt -> destination`.
-- Ở bước tìm kiếm folder trên server chỉ cần kiểm tra cấu trúc và sự hiện diện đầy đủ file, không checksum remote để tránh tốn thời gian quét ban đầu.
-- Bước tìm kiếm nên trả về danh sách candidate folders để người dùng hoặc business logic riêng tự chọn, không nên hard-code chọn folder đầu tiên.
-- Nếu local staging là thư mục tạm, nên xóa sau khi verify local và publish hoàn tất.
-- Nếu một destination fail checksum, rule nghiệp vụ hiện tại là xóa file lỗi rồi retry; cần log rõ destination nào fail ở lần nào.
-- Nếu file local fail checksum sau khi tải về, nên retry riêng file đó thay vì tải lại toàn bộ folder.
-- Nếu cần idempotent workflow, nên lưu `hash file path`, `current file`, `attempt`, `destination status` vào database.
-- Notification nên chứa tối thiểu: folder nguồn, file lỗi, destination lỗi, attempt cuối cùng và nguyên nhân.
-- Nếu UI bắt buộc hiển thị progress riêng cho từng destination, không nên chỉ dựa vào `TransferMultiDestinationAsync()` như hiện tại.
+- báo lỗi và dừng;
+- cho phép ghi đè;
+- hoặc yêu cầu thư mục phải trống trước khi chạy.
 
-## 8. Tóm tắt mapping giữa yêu cầu và API
+Khuyến nghị mặc định là báo lỗi nếu thư mục đã tồn tại để tránh ghi đè nhầm dữ liệu.
 
-- Lấy đầy đủ danh sách folder theo rule `.hash`: duyệt recursive bằng `ListDirectoryAsync()` + `OpenReadAsync()` + tự parse file `.hash` + kiểm tra sự hiện diện đầy đủ file.
-- Chọn folder cuối cùng: người dùng hoặc tầng nghiệp vụ tự quyết định từ danh sách candidate folders.
-- Copy folder về local: `TransferDirectoryAsync()`.
-- Verify file local: `GetMetadataAsync()` + tự tính hash bằng `IChecksumEngine` + đối chiếu file `.hash` + retry riêng file lỗi tối đa 3 lần.
-- Copy từng file lên nhiều destination: duyệt danh sách file từ `.hash` và gọi `TransferMultiDestinationAsync()`.
-- Verify từng destination: `GetMetadataAsync()` + tự tính hash tại destination + đối chiếu file `.hash`.
-- Retry khi checksum fail: `DeleteFileAsync()` + copy lại tối đa 3 lần.
-- Gửi thông báo: ứng dụng tự tích hợp `INotificationService` hoặc cơ chế tương đương.
+### Bước 3: Sinh file `.whd`
+
+Tạo file:
+
+```text
+ABCD.whd
+```
+
+với dung lượng đúng `100KB`.
+
+File này không cần ghi vào manifest `.hash`, nhưng vẫn phải dùng đúng cùng tên gốc với cả bộ file.
+
+### Bước 4: Sinh file `.wcl`
+
+Tạo file:
+
+```text
+ABCD.wcl
+```
+
+với dung lượng đúng `1GB`.
+
+Sau khi tạo xong file này, cần tính MD5 để chuẩn bị ghi vào `.hash`.
+
+### Bước 5: Sinh dãy file `.wxx`
+
+Tạo lần lượt các file:
+
+```text
+ABCD.w01
+ABCD.w02
+...
+ABCD.wxx
+```
+
+Quy tắc tạo dung lượng:
+
+1. Từ `w01` đến `w(xx-1)`: mỗi file đúng `1GB`.
+2. File cuối `wxx`: dùng dung lượng cấu hình, có thể nhỏ hơn `1GB`.
+
+Sau khi tạo từng file xong, tính ngay MD5 của file đó và lưu vào danh sách manifest tạm trong bộ nhớ.
+
+### Bước 6: Ghi file `.hash`
+
+Sau khi đã có đầy đủ checksum của `wcl` và toàn bộ `wxx`, tạo file:
+
+```text
+ABCD.hash
+```
+
+với nội dung theo đúng format `[HASH]`.
+
+Không được ghi `.hash` trước khi hoàn tất việc tạo và tính MD5 cho các file cần tham chiếu.
+
+## 6. Cấu trúc dữ liệu đề xuất cho implementation
+
+Nếu cần triển khai thành script hoặc utility có tái sử dụng, nên tổ chức dữ liệu đầu vào và đầu ra theo các model tương tự sau:
+
+```csharp
+public sealed record PackageGenerationOptions(
+    string OutputRoot,
+    string FolderName,
+    string BaseName,
+    int SegmentCount,
+    long LastSegmentSizeBytes,
+    bool Overwrite);
+
+public sealed record GeneratedFileEntry(
+    string Key,
+    string FileName,
+    long SizeBytes,
+    string Md5);
+
+public sealed record PackageGenerationResult(
+    string OutputDirectory,
+    string HashFilePath,
+    IReadOnlyList<GeneratedFileEntry> ManifestEntries);
+```
+
+Ý nghĩa:
+
+- `FolderName`: tên thư mục đầu ra.
+- `BaseName`: tên gốc dùng chung cho `.hash`, `.whd`, `.wcl`, `.wxx`.
+- `SegmentCount`: số lượng file `.wxx`.
+- `LastSegmentSizeBytes`: dung lượng file cuối.
+- `ManifestEntries`: danh sách checksum thực tế đã ghi vào `.hash`.
+
+## 7. Pseudocode xử lý end-to-end
+
+```text
+1. Validate folderName và baseName theo format hợp lệ.
+2. Validate segmentCount trong khoảng 5..12.
+3. Validate lastSegmentSizeBytes > 0 và <= 1GB.
+4. Tạo outputDirectory.
+5. Tạo file <baseName>.whd với kích thước 100KB.
+6. Tạo file <baseName>.wcl với kích thước 1GB.
+7. Tính MD5 cho <baseName>.wcl và lưu với key wcl.
+8. Với i từ 1 đến segmentCount:
+9.   Tạo tên key = w + i dạng 2 chữ số.
+10.  Nếu i < segmentCount thì size = 1GB, ngược lại size = lastSegmentSizeBytes.
+11.  Tạo file <baseName>.<key> với dung lượng size.
+12.  Tính MD5 cho file vừa tạo.
+13.  Lưu { key, fileName, size, md5 } vào manifest.
+14. Ghi file <baseName>.hash theo format [HASH].
+15. Trả về thông tin thư mục đầu ra và danh sách file đã sinh.
+```
+
+## 8. Ví dụ đầu ra hợp lệ
+
+Ví dụ:
+
+- Tên folder: `SGLC123A01C01G001S0001`
+- Tên gốc bộ file: `SGLC123A01-C01-G001-S0001`
+- Số file dữ liệu chia nhỏ: `5`
+
+Cấu trúc thư mục:
+
+```text
+SGLC123A01C01G001S0001\\
+  SGLC123A01-C01-G001-S0001.hash
+  SGLC123A01-C01-G001-S0001.whd
+  SGLC123A01-C01-G001-S0001.wcl
+  SGLC123A01-C01-G001-S0001.w01
+  SGLC123A01-C01-G001-S0001.w02
+  SGLC123A01-C01-G001-S0001.w03
+  SGLC123A01-C01-G001-S0001.w04
+  SGLC123A01-C01-G001-S0001.w05
+```
+
+Diễn giải ví dụ:
+
+1. Folder không có dấu `-`, nhưng vẫn hợp lệ.
+2. Tên gốc bộ file có dấu `-`, và toàn bộ file trong bộ dùng cùng tên này.
+3. `w01` đến `w04` có dung lượng `1GB`.
+4. `w05` là file cuối nên có thể nhỏ hơn `1GB`.
+
+## 9. Các điểm cần chốt trong implementation thực tế
+
+1. Script tạo file rỗng, file random, hay file có pattern dữ liệu lặp lại. Điều này ảnh hưởng trực tiếp đến thời gian tạo file và giá trị MD5.
+2. Có cần hỗ trợ resume nếu đang tạo dở một bộ file lớn hay không.
+3. Có cần xóa file đã tạo nếu một bước giữa chừng thất bại hay không.
+4. Có cần cấm thư mục đầu ra đã tồn tại để tránh ghi đè dữ liệu hay không.
+5. Có cần cho phép tên folder và tên gốc file dùng hai kiểu định dạng khác nhau trong cùng một lần chạy hay không. Theo rule hiện tại thì được phép.
+6. Có cần expose tham số chọn giữ dấu `-` hay bỏ dấu `-`, hay chỉ cần nhận trực tiếp chuỗi tên hoàn chỉnh đã hợp lệ.
+
+## 10. Tóm tắt mapping giữa yêu cầu và hành vi script
+
+- Tạo thư mục đầu ra: dùng `FolderName` hợp lệ.
+- Tạo file metadata nhỏ: sinh `ABCD.whd` dung lượng `100KB`.
+- Tạo file dữ liệu chính: sinh `ABCD.wcl` dung lượng `1GB`.
+- Tạo file phân mảnh: sinh `ABCD.w01` đến `ABCD.wxx`, với `xx` trong khoảng `5..12`.
+- Tính checksum: dùng MD5 cho `ABCD.wcl` và toàn bộ file `ABCD.wxx`.
+- Tạo manifest: ghi `ABCD.hash` theo format `[HASH]`, gồm `wcl` và toàn bộ `wxx`.
+- Giữ đồng nhất tên gốc: toàn bộ `.hash`, `.whd`, `.wcl`, `.wxx` phải cùng một `BaseName`.
